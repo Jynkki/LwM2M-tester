@@ -32,6 +32,7 @@ import java.util.Arrays;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.HttpClientBuilder;
@@ -40,6 +41,7 @@ import java.io.InputStream;
 import org.apache.commons.io.IOUtils;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
@@ -84,6 +86,7 @@ public class LeshanClientDemo {
 
     public static void main(final String[] args) {
 
+        String deviceId = null;
         Options options = new Options();
 
         options.addOption("h", "help", false, "Display help information.");
@@ -233,15 +236,21 @@ public class LeshanClientDemo {
             }
         }
         pskIdentity = endpoint.getBytes();
-        generateClient(endpoint, token, pskIdentity, pskKey);
-        createAndStartClient(endpoint, localAddress, localPort, secureLocalAddress, secureLocalPort, cl.hasOption("b"),
-                serverURI, pskIdentity, pskKey, latitude, longitude, scaleFactor);
+        deviceId = generateClient(endpoint, token, pskIdentity, pskKey);
+        if (deviceId != null) {
+            createAndStartClient(endpoint, localAddress, localPort, secureLocalAddress, secureLocalPort, cl.hasOption("b"),
+                    serverURI, pskIdentity, pskKey, latitude, longitude, scaleFactor, token, deviceId);
+        } else {
+            System.out.println ("Error in registrating device. Aborting");
+            System.exit(0);
+        }
     }
 
-    public static void generateClient(String endpoint, String token, byte[] pskIdentity, byte[] pskKey) {
+    public static String generateClient(String endpoint, String token, byte[] pskIdentity, byte[] pskKey) {
 
         String pskKeyString = new String(pskKey);
         String pskIdentityString = new String(pskIdentity);
+        String deviceId = null;
         token = "Basic " + token;
         JSONObject obj = new JSONObject();
         obj.put("BootstrapServerName", "DEMO_BOOTSTRAP");
@@ -285,7 +294,12 @@ public class LeshanClientDemo {
                 if (response.getStatusLine().getStatusCode() == 201) {
                     InputStream in = response.getEntity().getContent(); //Get the data in the entity
                     String result = IOUtils.toString(in, StandardCharsets.UTF_8);
+                    JSONParser jsonParser = new JSONParser();
+                    JSONObject jsonObject = (JSONObject) jsonParser.parse(result);
+                    deviceId = (String) jsonObject.get("Id");
+                    System.out.println("Device Id: : " + deviceId);
                     System.out.println("Response from IoTA is: " + result);
+                    return deviceId;
                 } else {
                     System.out.println("Error in responce code from IoTA: " + response.getStatusLine().getStatusCode());
                     InputStream in = response.getEntity().getContent(); //Get the data in the entity
@@ -297,16 +311,16 @@ public class LeshanClientDemo {
         } catch (Exception ex) {
 
             System.out.println("Error in Communication to IoTA " + ex);
-
+            return null;
         } finally {
             //httpClient.releaseConnection();;
         }
-
+        return null;
     }
 
     public static void createAndStartClient(String endpoint, String localAddress, int localPort,
             String secureLocalAddress, int secureLocalPort, boolean needBootstrap, String serverURI, byte[] pskIdentity,
-            byte[] pskKey, Float latitude, Float longitude, float scaleFactor) {
+            byte[] pskKey, Float latitude, Float longitude, float scaleFactor, final String token, final String deviceId) {
 
         locationInstance = new MyLocation(latitude, longitude, scaleFactor);
 
@@ -374,6 +388,25 @@ public class LeshanClientDemo {
             @Override
             public void run() {
                 client.destroy(true); // send de-registration request before destroy
+                HttpClient httpClient = HttpClientBuilder.create().build();
+                try {
+                    String COMMAND = "devices";
+                    HttpDelete delete = new HttpDelete(httpsURL + "/" + URLPATH +"/" + COMMAND + "/" + deviceId);
+                    //StringEntity params =new StringEntity(obj.toString());
+                    delete.addHeader("X-DeviceNetwork", "613b7124-e2db-4e76-9feb-102a869bd497");
+                    delete.addHeader("Authorization", "Basic " + token);
+                    //delete.setEntity(params);
+                    HttpResponse response = httpClient.execute(delete);
+                    if (response != null) {
+                        String status = response.getStatusLine().toString();
+                        System.out.println("Response from delete: " + status);
+                    }
+                } catch (Exception ex) {
+                    System.out.println("Error in deleting Device " + deviceId + " with error code " + ex);
+
+                } finally {
+                    //httpClient.releaseConnection();;
+                }
             }
         });
 
