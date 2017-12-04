@@ -79,10 +79,11 @@ public class LeshanClientDemo {
 
     private static UUID idOne = UUID.randomUUID();
     private static UUID idTwo = UUID.randomUUID();
-    private static String httpsURL = "https://api.blab.iotacc.ericsson.net";
-    private static String URLPATH = "occhub/proxy/appiot/api/v3";
+    private final static String httpsURL = "https://api.blab.iotacc.ericsson.net";
+    private final static String URLPATH = "occhub/proxy/appiot/api/v3";
 
     private static MyLocation locationInstance;
+    private static RandomTemperatureSensor temperatureInstance;
 
     public static void main(final String[] args) {
 
@@ -239,7 +240,7 @@ public class LeshanClientDemo {
         deviceId = generateClient(endpoint, token, pskIdentity, pskKey);
         if (deviceId != null) {
             createAndStartClient(endpoint, localAddress, localPort, secureLocalAddress, secureLocalPort, cl.hasOption("b"),
-                    serverURI, pskIdentity, pskKey, latitude, longitude, scaleFactor, token, deviceId);
+                    serverURI, pskIdentity, pskKey, latitude, longitude, scaleFactor, token, deviceId, 2.64d, httpsURL, URLPATH);
         } else {
             System.out.println ("Error in registrating device. Aborting");
             System.exit(0);
@@ -320,9 +321,10 @@ public class LeshanClientDemo {
 
     public static void createAndStartClient(String endpoint, String localAddress, int localPort,
             String secureLocalAddress, int secureLocalPort, boolean needBootstrap, String serverURI, byte[] pskIdentity,
-            byte[] pskKey, Float latitude, Float longitude, float scaleFactor, final String token, final String deviceId) {
+            byte[] pskKey, Float latitude, Float longitude, float scaleFactor, final String token, final String deviceId, Double temp, final String httpsURL, final String URLPATH) {
 
         locationInstance = new MyLocation(latitude, longitude, scaleFactor);
+        temperatureInstance = new RandomTemperatureSensor(deviceId, token, httpsURL, URLPATH);
 
         // Initialize model
         List<ObjectModel> models = ObjectLoader.loadDefault();
@@ -346,7 +348,8 @@ public class LeshanClientDemo {
         }
         initializer.setClassForObject(DEVICE, MyDevice.class);
         initializer.setInstancesForObject(LOCATION, locationInstance);
-        initializer.setInstancesForObject(OBJECT_ID_TEMPERATURE_SENSOR, new RandomTemperatureSensor());
+        //initializer.setInstancesForObject(OBJECT_ID_TEMPERATURE_SENSOR, new RandomTemperatureSensor());
+        initializer.setInstancesForObject(OBJECT_ID_TEMPERATURE_SENSOR, temperatureInstance);
         List<LwM2mObjectEnabler> enablers = initializer.create(SECURITY, SERVER, DEVICE, LOCATION,
                 OBJECT_ID_TEMPERATURE_SENSOR);
 
