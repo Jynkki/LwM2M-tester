@@ -1,5 +1,7 @@
 package org.eclipse.leshan.client.demo;
 
+import java.lang.reflect.Field;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Iterator;
@@ -9,6 +11,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.Date;
+import java.util.UUID;
 import java.lang.*;
 import java.text.SimpleDateFormat;
 
@@ -19,10 +22,13 @@ import org.json.simple.JSONArray;
 import org.json.simple.parser.JSONParser;
 import java.nio.charset.StandardCharsets;
 
-//import io.swagger.*;
 import io.swagger.client.ApiException;
 import io.swagger.client.api.*;
 import io.swagger.client.ApiClient;
+import io.swagger.client.ApiException;
+import io.swagger.client.api.VersionApi;
+import io.swagger.client.api.DeviceApi;
+import io.swagger.client.model.*;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -63,75 +69,56 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
             @Override
             public void run() {
 
-                 String baseApiUrl = httpsURL;
-                 String v3Token = token;
-                 int connectTimeout = 60000;
-                 int readTimeout = 120000;
+                String baseApiUrl = "https://api.blab.iotacc.ericsson.net/occhub/proxy/appiot";
+                String xDeviceNetwork = "613b7124-e2db-4e76-9feb-102a869bd497"; // String | Device Network Id
+                UUID endpoint = UUID.fromString(deviceId); // String | Device endpoint
+                String v3Token = "Basic " + token;
+                int connectTimeout = 60000;
+                int readTimeout = 120000;
 
-                 // Create an ApiClient per thread
-                 ApiClient client = new ApiClient();
-                 client.setBasePath(baseApiUrl);
-                 client.setApiKey("Basic " + v3Token);
-                 client.setConnectTimeout(connectTimeout);
-                 client.setDebugging(true);
-
-                 System.out.println("Sending Version request");
-                 //System.out.println(new VersionApi(client));
+                ApiClient client = new ApiClient();
+                String authorization = v3Token; // String | Basic Access Authentication
+                client.setBasePath(baseApiUrl);
+                client.setDebugging(false);
  
                 //StringProperty smartObjectId = new SimpleStringProperty();
                 String smartObjectId = " ";
                 temp = (ThreadLocalRandom.current().nextInt(min, max + 1))/1.0f;
                 adjustTemperature(temp);
-                //System.out.println("Temperature: " + temp);
+
+                // Wait for a while for the measurement to be sent
                 try {
-                    // thread to sleep for 1000 milliseconds
+                    // thread to sleep for x milliseconds
                     Thread.sleep(3000);
                 } catch (Exception e) {
                         System.out.println("Sleep failed: " + e);
                 }
-                //System.out.println("Start HTTP sequence");
-                HttpClient httpClient = HttpClientBuilder.create().build();
+
+                //Read the device info
+                DeviceApi deviceApiInstance = new DeviceApi(client);
+                SigmaSensationDTODeviceDeviceRequest deviceRequest = new SigmaSensationDTODeviceDeviceRequest();
                 try {
-                    HttpGet request = new HttpGet(httpsURL + "/" + URLPATH +"/devices/" + deviceId);
-                    request.addHeader("X-DeviceNetwork", "613b7124-e2db-4e76-9feb-102a869bd497");
-                    request.addHeader("Authorization", "Basic " + token);
-                    HttpResponse response = httpClient.execute(request);
-                    if (response != null) {
-                        if ((response.getStatusLine().getStatusCode() == 200) || (response.getStatusLine().getStatusCode() == 204) ) {
-                            InputStream in = response.getEntity().getContent(); //Get the data in the entity
-                            String result = IOUtils.toString(in, StandardCharsets.UTF_8);
-                            JSONParser jsonParser = new JSONParser();
-                            Object obj = jsonParser.parse(result);
-                            JSONObject jsonObject = (JSONObject) obj;
-                            JSONArray smartObjects = (JSONArray) jsonObject.get("SmartObjects");
-                            Iterator i = smartObjects.iterator();
-                            while (i.hasNext()) {
-                                JSONObject smartObject = (JSONObject) i.next();
-                                //System.out.println("JSON Object received: " + smartObject.toString());
-                                if (smartObject.get("Name").toString().equals("Temperature")) {
-                                      smartObjectId = smartObject.get("Id").toString();
-                                      //System.out.println("JSON Object: " + smartObject.get("TypeId").toString());
-                                 }
-                            }
+                    SigmaSensationDTODeviceDeviceResponse result = deviceApiInstance.deviceGet_0(endpoint, xDeviceNetwork, authorization);
+
+                    if (result != null) {
+                        if ((client.getStatusCode() == 200) || (client.getStatusCode() == 204) ) {
+                                for (SigmaSensationDTOSmartObjectSmartObjectListResponse g: result.getSmartObjects()) {
+                                    if (g.getName().equals("Temperature")) {
+                                        smartObjectId = g.getId().toString();
+                                    }
+                                }
                         } else {
-                            System.out.println("Could not read SmartObject id, Error code: " + response.getStatusLine().getStatusCode());
-                            InputStream in = response.getEntity().getContent(); //Get the data in the entity
-                            String result = IOUtils.toString(in, StandardCharsets.UTF_8);
+                            System.out.println("Could not read SmartObject id, Error code: " + client.getStatusCode());
                             System.out.println("Response from IoTA is: " + result);
                             return;
                         }
                     }
-                } catch (Exception ex) {
-                    if (smartObjectId.equals(" ")) {
-                        System.out.println("No Temperature devcie found");
-                    } else {
-                        System.out.println("Error in Communication to IoTA when Smart Object is fetched" + ex);
-                        return;
-                    }
-                } finally {
-                    //httpClient.releaseConnection();;
+
+                } catch (ApiException e) {
+                    System.err.println("Error reading the device: " + endpoint);
+                    e.printStackTrace();
                 }
-                
+
                 // Read SmartObject
                 if (smartObjectId.equals(" ")){
                     System.out.println("No Temperature device found");
@@ -144,27 +131,12 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
                         System.out.println("Sleep failed: " + e);
                 }
 
-                HttpClient httpObj = HttpClientBuilder.create().build();
+                SmartObjectApi readInstance = new SmartObjectApi(client);
                 try {
-                    HttpGet objRequest = new HttpGet(httpsURL + "/" + URLPATH +"/smartObjects/" + smartObjectId + "/resources/read");
-                    objRequest.addHeader("X-DeviceNetwork", "613b7124-e2db-4e76-9feb-102a869bd497");
-                    objRequest.addHeader("Authorization", "Basic " + token);
-                    HttpResponse response = httpObj.execute(objRequest);
-                    if (response != null) {
-                        if ((response.getStatusLine().getStatusCode() == 200) || (response.getStatusLine().getStatusCode() == 204)) {
-                            //System.out.println("SmartObject " + smartObjectId + " has been read");
-                        } else {
-                            System.out.println("SmartObject values could not be read into APPIoT. Error Code: " + response.getStatusLine().getStatusCode());
-                            return;
-                        }
-                    } else {
-                        System.out.println("No Response from SmartObject Read");
-                        return;
-                   }
-                } catch (Exception ex) {
-                    System.out.println("Error in Communication to IoTA " + ex);
-                } finally {
-                    //httpClient.releaseConnection();;
+                    readInstance.smartObjectReadResources(UUID.fromString(smartObjectId), xDeviceNetwork, authorization);
+                } catch (ApiException e) {
+                    System.err.println("Error: Unable to perform a read on smart object" + smartObjectId);
+                    e.printStackTrace();
                 }
 
                 // Fetch SmartObject Value
@@ -174,6 +146,37 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
                 } catch (Exception e) {
                         System.out.println("Sleep failed: " + e);
                 }
+
+                SmartObjectApi fetchInstance = new SmartObjectApi(client);
+                try {
+                    SigmaSensationDTOSmartObjectSmartObjectResponse result = fetchInstance.smartObjectGetLatestMeasurementForResourcesAsync(UUID.fromString(smartObjectId), xDeviceNetwork, authorization);
+
+                    if (result != null) {
+                        if ((client.getStatusCode() == 200) || (client.getStatusCode() == 204) ) {
+                            for (SigmaSensationDTOResourceResourceResponse g: result.getResources()) {
+                                if (g.getName().equals("Sensor Value")) {
+                                     SigmaSensationDTOGrainCommunicationSignalRMeasurementMessage measurement = g.getLatestMeasurement();
+                                     //String value = g.getLatestMeasurement().toString();
+                                     System.out.println("Temperature Read: " + measurement.getV());
+                                     if (temp != measurement.getV()) {
+                                            System.out.println(sdf.format(timeStamp.getTime()) + ": Measurement failed. The smartobject is " + smartObjectId + ".  Read value = " + measurement.getV() + " should have been " + temp);
+                                        } else {
+                                            System.out.println(sdf.format(timeStamp.getTime()) + ": Measurement OK");
+                                        }
+                                }
+                            }
+                        } else {
+                            System.out.println("Could not read SmartObject id, Error code: " + client.getStatusCode());
+                            System.out.println("Response from IoTA is: " + result);
+                            return;
+                        }
+                    }
+                } catch (ApiException e) {
+                    System.err.println("Exception when calling SmartObjectApi#smartObjectGetLatestMeasurementForResourcesAsync");
+                    e.printStackTrace();
+                }
+/*
+
                 //String timeStamp = new SimpleDateFormat("yyyy.MM.dd.HH.mm.ss").format(new Date());
                 HttpClient httpFetch = HttpClientBuilder.create().build();
                 try {
@@ -194,15 +197,12 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
                             Iterator i = smartObjects.iterator();
                             while (i.hasNext()) {
                                 JSONObject smartObject = (JSONObject) i.next();
-                                //smartObjects.forEach(item -> {
-                                //JSONObject obj = (JSONObject) item;
                                 if (smartObject.get("Name").toString().equals("Sensor Value")) {
                                     try {
                                         Object valueObj  = jsonParser.parse(smartObject.get("LatestMeasurement").toString());
                                         JSONObject jsonValue = (JSONObject) valueObj;
                                         //System.out.println("JSON Object: " + jsonValue.get("v").toString());
                                         float number = Float.parseFloat(jsonValue.get("v").toString());
-                                        //System.out.println("Numver is: " + number);
                                         if (temp != number) {
                                             System.out.println(sdf.format(timeStamp.getTime()) + ": Measurement failed. The smartobject is " + smartObjectId + ".  Read value = " + number + " should have been " + temp);
                                         } else {
@@ -227,7 +227,7 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
                     //httpClient.releaseConnection();;
                 }
 
-
+*/
 
 
             }
@@ -243,8 +243,8 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
             return ReadResponse.success(resourceId, getTwoDigitValue(maxMeasuredValue));
         case SENSOR_VALUE:
             return ReadResponse.success(resourceId, getTwoDigitValue(currentTemp));
-        case UNITS:
-            return ReadResponse.success(resourceId, UNIT_CELSIUS);
+        //case UNITS:
+        //    return ReadResponse.success(resourceId, UNIT_CELSIUS);
         default:
             return super.read(resourceId);
         }
@@ -267,10 +267,7 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
     }
 
     private synchronized void adjustTemperature(Float temp) {
-        //float delta = (rng.nextInt(20) - 10) / 10f;
-        //currentTemp += delta;
         currentTemp = temp;
-        //System.out.println("Sending out: " + currentTemp);
         Integer changedResource = adjustMinMaxMeasuredValue(currentTemp);
         if (changedResource != null) {
             fireResourcesChange(SENSOR_VALUE, changedResource);
