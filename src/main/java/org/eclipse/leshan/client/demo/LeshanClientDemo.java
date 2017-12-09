@@ -22,6 +22,10 @@ import static org.eclipse.leshan.LwM2mId.*;
 import static org.eclipse.leshan.client.object.Security.*;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
@@ -36,7 +40,6 @@ import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.HttpClientBuilder;
-//import org.apache.HttpClient.HttpStatus;
 import java.io.InputStream;
 import org.apache.commons.io.IOUtils;
 import org.json.simple.JSONArray;
@@ -79,11 +82,17 @@ public class LeshanClientDemo {
 
     private static UUID idOne = UUID.randomUUID();
     private static UUID idTwo = UUID.randomUUID();
-    private final static String httpsURL = "https://api.blab.iotacc.ericsson.net";
-    private final static String URLPATH = "occhub/proxy/appiot/api/v3";
+    private static String httpsURL = "https://api.blab.iotacc.ericsson.net";
+    private static String URLPath = "occhub/proxy/appiot/api/v3";
 
     private static MyLocation locationInstance;
     private static RandomTemperatureSensor temperatureInstance;
+    private static String token = DEFAULT_TOKEN;
+    private static String serverURI = null;
+    private static String XDeviceNetwork = null;
+    private static String pskKeyString = null;
+    private static String pskIdentityString = null;
+    private static String endpoint = null;
 
     public static void main(final String[] args) {
 
@@ -144,7 +153,6 @@ public class LeshanClientDemo {
         }
 
         // Get endpoint name
-        String endpoint;
         if (cl.hasOption("n")) {
             endpoint = cl.getOptionValue("n") + "-" + idOne;
         } else {
@@ -156,7 +164,6 @@ public class LeshanClientDemo {
         }
 
         // Get authentication token
-        String token;
         if (cl.hasOption("auth")) {
             token = cl.getOptionValue("auth");
         } else {
@@ -165,7 +172,6 @@ public class LeshanClientDemo {
 
 
         // Get server URI
-        String serverURI;
         if (cl.hasOption("u")) {
             if (cl.hasOption("i"))
                 serverURI = "coaps://" + cl.getOptionValue("u");
@@ -236,58 +242,82 @@ public class LeshanClientDemo {
                 return;
             }
         }
-        pskIdentity = endpoint.getBytes();
-        deviceId = generateClient(endpoint, token, pskIdentity, pskKey);
+        //pskIdentity = endpoint.getBytes();
+        JSONObject confObject = readConfig();
+        System.out.println("ConfigObject: " + confObject.toString());
+        deviceId = generateClient(endpoint, pskIdentity, pskKey, confObject);
         if (deviceId != null) {
             createAndStartClient(endpoint, localAddress, localPort, secureLocalAddress, secureLocalPort, cl.hasOption("b"),
-                    serverURI, pskIdentity, pskKey, latitude, longitude, scaleFactor, token, deviceId, 2.64d, httpsURL, URLPATH);
+                    serverURI, latitude, longitude, scaleFactor, token, deviceId, 2.64d, httpsURL, URLPath);
         } else {
             System.out.println ("Error in registrating device. Aborting");
             System.exit(0);
         }
     }
 
-    public static String generateClient(String endpoint, String token, byte[] pskIdentity, byte[] pskKey) {
-
-        String pskKeyString = new String(pskKey);
-        String pskIdentityString = new String(pskIdentity);
+    public static JSONObject readConfig() {
         String deviceId = null;
-        token = "Basic " + token;
-        JSONObject obj = new JSONObject();
-        obj.put("BootstrapServerName", "DEMO_BOOTSTRAP");
-        obj.put("DataCollectorId", "d0830911-fc35-4b2e-9ea4-cf9570dc84a4");
-        obj.put("DeviceIdentifier", endpoint);
-        obj.put("DeviceStandard", "LWM2M");
-        obj.put("DeviceTemplateId", "48d0f2be-dfd7-4c5f-9905-951f33958d08");
-        obj.put("DeviceTypeId", "58882a49-1750-4008-8ccb-4cb0cd1a88ae");
-        obj.put("LocationId", "01c732f8-6509-4ba3-b55c-a2955d37dd3b");
-        obj.put("Name", endpoint);
-        JSONArray SettingsCat = new JSONArray();
-        JSONObject SettingsCat1 = new JSONObject();
-        JSONArray Settings = new JSONArray();
-        JSONObject identity = new JSONObject();
-        JSONObject key = new JSONObject();
-        key.put("DataType", "String");
-        key.put("Key", "preSharedKey");
-        key.put("Value", pskKeyString);
-        identity.put("DataType", "String");
-        identity.put("Key", "identity");
-        identity.put("Value", pskIdentityString);
-        Settings.add(identity);
-        Settings.add(key);
-        SettingsCat1.put("Name", "PSK");
-        SettingsCat1.put("Settings", Settings);
-        SettingsCat.add(SettingsCat1);
-        obj.put("SettingCategories", SettingsCat);
-        // Define options for command line tools
-        System.out.println("JSON to put: " + obj.toString());
+        String pskKey = null;
+        JSONParser fileparser = new JSONParser();
+        JSONObject configObject = new JSONObject();
+        try {
+            Object file = fileparser.parse(new FileReader("configuration.json"));
+            configObject =  (JSONObject) file;
+            token = configObject.get("Authorization").toString();
+            configObject.remove("Authorization");
+            httpsURL = configObject.get("httpsURL").toString();
+            configObject.remove("httpsURL");
+            URLPath = configObject.get("URLPath").toString();
+            configObject.remove("URLPath");
+            serverURI = "coaps://" + configObject.get("serverURI").toString();
+            configObject.remove("serverURI");
+            XDeviceNetwork = configObject.get("X-DeviceNetwork").toString();
+            configObject.remove("X-DeviceNetwork");
+            endpoint = configObject.get("endpoint").toString() + "-" + idOne;
+            configObject.remove("endpoint");
+            configObject.put("DeviceIdentifier", endpoint);
+            configObject.put("Name", endpoint);
+            pskIdentityString = endpoint;
+            pskKeyString = configObject.get("pskKey").toString();
+            configObject.remove("pskKey");
+            JSONArray SettingsCat = new JSONArray();
+            JSONObject SettingsCat1 = new JSONObject();
+            JSONArray Settings = new JSONArray();
+            JSONObject identity = new JSONObject();
+            JSONObject key = new JSONObject();
+            key.put("DataType", "String");
+            key.put("Key", "preSharedKey");
+            key.put("Value", pskKeyString);
+            identity.put("DataType", "String");
+            identity.put("Key", "identity");
+            identity.put("Value", endpoint);
+            Settings.add(identity);
+            Settings.add(key);
+            SettingsCat1.put("Name", "PSK");
+            SettingsCat1.put("Settings", Settings);
+            SettingsCat.add(SettingsCat1);
+            configObject.put("SettingCategories", SettingsCat);
+
+            System.out.println("Whole JSON: " + configObject.toString());
+
+        } catch (IOException | org.json.simple.parser.ParseException e) {
+            e.printStackTrace();
+            System.exit(0);
+        }
+    System.out.println("ConfigObject: " + configObject.toString());
+    return configObject;
+    }
+
+    public static String generateClient(String endpoint, byte[] pskIdentity, byte[] pskKey, JSONObject configObject) {
+
+        String deviceId = null;
         HttpClient httpClient = HttpClientBuilder.create().build();
         try {
             String PATH = "devices";
-            HttpPost request = new HttpPost(httpsURL + "/" + URLPATH +"/" + PATH);
-            StringEntity params =new StringEntity(obj.toString());
+            HttpPost request = new HttpPost(httpsURL + "/" + URLPath +"/" + PATH);
+            StringEntity params =new StringEntity(configObject.toString());
             request.addHeader("content-type", "application/json");
-            request.addHeader("X-DeviceNetwork", "613b7124-e2db-4e76-9feb-102a869bd497");
+            request.addHeader("X-DeviceNetwork", XDeviceNetwork);
             request.addHeader("Authorization", token);
             request.setEntity(params);
             HttpResponse response = httpClient.execute(request);
@@ -320,11 +350,13 @@ public class LeshanClientDemo {
     }
 
     public static void createAndStartClient(String endpoint, String localAddress, int localPort,
-            String secureLocalAddress, int secureLocalPort, boolean needBootstrap, String serverURI, byte[] pskIdentity,
-            byte[] pskKey, Float latitude, Float longitude, float scaleFactor, final String token, final String deviceId, Double temp, final String httpsURL, final String URLPATH) {
+            String secureLocalAddress, int secureLocalPort, boolean needBootstrap, String serverURI,
+            Float latitude, Float longitude, float scaleFactor, final String token, final String deviceId, Double temp, final String httpsURL, final String URLPath) {
 
+        byte [] pskIdentity = pskIdentityString.getBytes();
+        byte[] pskKey = pskKeyString.getBytes();
         locationInstance = new MyLocation(latitude, longitude, scaleFactor);
-        temperatureInstance = new RandomTemperatureSensor(deviceId, token, httpsURL, URLPATH);
+        temperatureInstance = new RandomTemperatureSensor(deviceId, token, httpsURL, URLPath);
 
         // Initialize model
         List<ObjectModel> models = ObjectLoader.loadDefault();
@@ -394,10 +426,10 @@ public class LeshanClientDemo {
                 HttpClient httpClient = HttpClientBuilder.create().build();
                 try {
                     String COMMAND = "devices";
-                    HttpDelete delete = new HttpDelete(httpsURL + "/" + URLPATH +"/" + COMMAND + "/" + deviceId);
+                    HttpDelete delete = new HttpDelete(httpsURL + "/" + URLPath +"/" + COMMAND + "/" + deviceId);
                     //StringEntity params =new StringEntity(obj.toString());
-                    delete.addHeader("X-DeviceNetwork", "613b7124-e2db-4e76-9feb-102a869bd497");
-                    delete.addHeader("Authorization", "Basic " + token);
+                    delete.addHeader("X-DeviceNetwork", XDeviceNetwork);
+                    delete.addHeader("Authorization", token);
                     //delete.setEntity(params);
                     HttpResponse response = httpClient.execute(delete);
                     if (response != null) {

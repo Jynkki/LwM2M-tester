@@ -62,7 +62,7 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
     private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd.HH.mm.ss");
     private Date timeStamp = new Date();
 
-    public RandomTemperatureSensor(final String deviceId, final String token, final String httpsURL, final String URLPATH) {
+    public RandomTemperatureSensor(final String deviceId, final String token, final String httpsURL, final String URLPath) {
         this.scheduler = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Temperature Sensor"));
         scheduler.scheduleAtFixedRate(new Runnable() {
             private float temp = 1.0f;
@@ -72,7 +72,7 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
                 String baseApiUrl = "https://api.blab.iotacc.ericsson.net/occhub/proxy/appiot";
                 String xDeviceNetwork = "613b7124-e2db-4e76-9feb-102a869bd497"; // String | Device Network Id
                 UUID endpoint = UUID.fromString(deviceId); // String | Device endpoint
-                String v3Token = "Basic " + token;
+                String v3Token = token;
                 int connectTimeout = 60000;
                 int readTimeout = 120000;
 

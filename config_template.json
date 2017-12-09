@@ -1,0 +1,17 @@
+{
+  "serverURI": "",
+  "URLPath": "",
+  "httpsURL": "",
+  "Authorization": "",
+  "X-DeviceNetwork": "",
+  "pskKey": "",
+  "endpoint": "",
+  "BootstrapServerName": "",
+  "DataCollectorId": "",
+  "DeviceIdentifier": "",
+  "DeviceStandard": "LWM2M",
+  "DeviceTemplateId": "",
+  "DeviceTypeId": "",
+  "LocationId": "",
+  "Name": "string"
+}
