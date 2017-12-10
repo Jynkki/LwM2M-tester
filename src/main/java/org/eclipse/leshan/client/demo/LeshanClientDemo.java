@@ -93,6 +93,7 @@ public class LeshanClientDemo {
     private static String pskKeyString = null;
     private static String pskIdentityString = null;
     private static String endpoint = null;
+    private static String mongoURI = null;
 
     public static void main(final String[] args) {
 
@@ -244,11 +245,10 @@ public class LeshanClientDemo {
         }
         //pskIdentity = endpoint.getBytes();
         JSONObject confObject = readConfig();
-        System.out.println("ConfigObject: " + confObject.toString());
         deviceId = generateClient(endpoint, pskIdentity, pskKey, confObject);
         if (deviceId != null) {
             createAndStartClient(endpoint, localAddress, localPort, secureLocalAddress, secureLocalPort, cl.hasOption("b"),
-                    serverURI, latitude, longitude, scaleFactor, token, deviceId, 2.64d, httpsURL, URLPath);
+                    serverURI, latitude, longitude, scaleFactor, token, deviceId, 2.64d, httpsURL, URLPath, mongoURI);
         } else {
             System.out.println ("Error in registrating device. Aborting");
             System.exit(0);
@@ -280,6 +280,8 @@ public class LeshanClientDemo {
             pskIdentityString = endpoint;
             pskKeyString = configObject.get("pskKey").toString();
             configObject.remove("pskKey");
+            mongoURI = configObject.get("MongoURI").toString();
+            configObject.remove("mongoURI");
             JSONArray SettingsCat = new JSONArray();
             JSONObject SettingsCat1 = new JSONObject();
             JSONArray Settings = new JSONArray();
@@ -298,13 +300,10 @@ public class LeshanClientDemo {
             SettingsCat.add(SettingsCat1);
             configObject.put("SettingCategories", SettingsCat);
 
-            System.out.println("Whole JSON: " + configObject.toString());
-
         } catch (IOException | org.json.simple.parser.ParseException e) {
             e.printStackTrace();
             System.exit(0);
         }
-    System.out.println("ConfigObject: " + configObject.toString());
     return configObject;
     }
 
@@ -351,12 +350,12 @@ public class LeshanClientDemo {
 
     public static void createAndStartClient(String endpoint, String localAddress, int localPort,
             String secureLocalAddress, int secureLocalPort, boolean needBootstrap, String serverURI,
-            Float latitude, Float longitude, float scaleFactor, final String token, final String deviceId, Double temp, final String httpsURL, final String URLPath) {
+            Float latitude, Float longitude, float scaleFactor, final String token, final String deviceId, Double temp, final String httpsURL, final String URLPathi, final String mongoURI) {
 
         byte [] pskIdentity = pskIdentityString.getBytes();
         byte[] pskKey = pskKeyString.getBytes();
         locationInstance = new MyLocation(latitude, longitude, scaleFactor);
-        temperatureInstance = new RandomTemperatureSensor(deviceId, token, httpsURL, URLPath);
+        temperatureInstance = new RandomTemperatureSensor(deviceId, token, httpsURL, URLPath, mongoURI);
 
         // Initialize model
         List<ObjectModel> models = ObjectLoader.loadDefault();
