@@ -163,6 +163,13 @@ Contributors:
             <artifactId>mongo-java-driver</artifactId>
             <version>3.4.1</version>
         </dependency>
+
+        <!-- Read Docker-secret library -->
+        <dependency>
+            <groupId>com.cars</groupId>
+            <artifactId>docker-secrets</artifactId>
+            <version>0.2.0</version>
+        </dependency>
     </dependencies>
 
    <properties>

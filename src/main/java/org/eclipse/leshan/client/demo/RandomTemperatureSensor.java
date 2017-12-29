@@ -98,20 +98,21 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
 
     public RandomTemperatureSensor(final String deviceId, final String token, final String httpsURL, final String URLPath, final String mongoURI) {        
 
-        //MongoClient mongo = null;
-        //MongoCollection<Document> devices = null;
-        //SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        //Date timeStamp = new Date();
-        //String deviceStatus = "UNKNOWN";
+        String baseApiUrl = httpsURL + "/" + URLPath;
+        String xDeviceNetwork = "613b7124-e2db-4e76-9feb-102a869bd497"; // String | Device Network Id
+        UUID endpoint = UUID.fromString(deviceId); // String | Device endpoint
+        String v3Token = token;
+        int connectTimeout = 60000;
+        int readTimeout = 120000;
 
         try { 
             MongoClientURI uri  = new MongoClientURI(mongoURI); 
             mongo = new MongoClient(uri);
             MongoDatabase db = mongo.getDatabase(uri.getDatabase());
             devices = db.getCollection("devices");
-            Document initialData = new Document(new Document("Device Id", deviceId)
-                .append("Time", sdf.format(timeStamp.getTime() ))
-                .append("Status", "UNKNOWN")
+            Document initialData = new Document(new Document("deviceid", deviceId)
+                .append("time", sdf.format(timeStamp.getTime() ))
+                .append("status", "UNKNOWN")
             );
             devices.insertOne(initialData);
         } catch (Exception e) {
@@ -124,13 +125,6 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
             private float temp = 1.0f;
             @Override
             public void run() {
-
-                String baseApiUrl = "https://api.blab.iotacc.ericsson.net/occhub/proxy/appiot";
-                String xDeviceNetwork = "613b7124-e2db-4e76-9feb-102a869bd497"; // String | Device Network Id
-                UUID endpoint = UUID.fromString(deviceId); // String | Device endpoint
-                String v3Token = token;
-                int connectTimeout = 60000;
-                int readTimeout = 120000;
 
                 ApiClient client = new ApiClient();
                 String authorization = v3Token; // String | Basic Access Authentication
@@ -164,14 +158,32 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
                                     }
                                 }
                         } else {
-                            System.out.println("Could not read SmartObject id, Error code: " + client.getStatusCode());
-                            System.out.println("Response from IoTA is: " + result);
+                            Document deviceData = new Document(new Document("deviceid", deviceId)
+                                .append("time", sdf.format(timeStamp.getTime() ))
+                            );
+                            if (!deviceStatus.equals("Not OK")) {
+                                deviceData.append("status", "Not OK");
+                                Document newData = new Document("$set", deviceData);
+                                devices.updateOne(eq("deviceid", deviceId), newData);
+                            }
+                            deviceStatus = "Not OK";
+                            System.out.println(sdf.format(timeStamp.getTime()) + ": Could not read SmartObject id, Error code: " + client.getStatusCode() + ". Response from IoTA is: " + result);
                             return;
                         }
                     }
 
                 } catch (ApiException e) {
-                    System.err.println("Error reading the device: " + endpoint);
+                    Document deviceData = new Document(new Document("deviceid", deviceId)
+                        .append("time", sdf.format(timeStamp.getTime() ))
+                    );
+
+                    if (!deviceStatus.equals("Not OK")) {
+                        deviceData.append("status", "Not OK");
+                        Document newData = new Document("$set", deviceData);
+                        devices.updateOne(eq("deviceid", deviceId), newData);
+                    }
+                    deviceStatus = "Not OK";
+                    System.out.println(sdf.format(timeStamp.getTime()) + ": Error reading the device: " + endpoint);
                     e.printStackTrace();
                 }
 
@@ -207,28 +219,31 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
                 try {
                     SigmaSensationDTOSmartObjectSmartObjectResponse result = fetchInstance.smartObjectGetLatestMeasurementForResourcesAsync(UUID.fromString(smartObjectId), xDeviceNetwork, authorization);
                     timeStamp = new Date();
+                    Document deviceData = new Document(new Document("deviceid", deviceId)
+                        .append("time", sdf.format(timeStamp.getTime() ))
+                    );
                     if (result != null) {
                         if ((client.getStatusCode() == 200) || (client.getStatusCode() == 204) ) {
                             for (SigmaSensationDTOResourceResourceResponse g: result.getResources()) {
                                 if (g.getName().equals("Sensor Value")) {
                                      SigmaSensationDTOGrainCommunicationSignalRMeasurementMessage measurement = g.getLatestMeasurement();
                                      System.out.println("Temperature Read: " + measurement.getV());
-                                     Document deviceData = new Document(new Document("Device Id", deviceId)
-                                        .append("Time", sdf.format(timeStamp.getTime() ))
-                                     );
+                                     //Document deviceData = new Document(new Document("deviceid", deviceId)
+                                     //   .append("time", sdf.format(timeStamp.getTime() ))
+                                     //);
                                      if (temp != measurement.getV()) {
-                                         //if (!deviceStatus.equals("Not OK")) {
-                                             deviceData.append("Status", "Not OK");
+                                         if (!deviceStatus.equals("Not OK")) {
+                                             deviceData.append("status", "Not OK");
                                              Document newData = new Document("$set", deviceData);
-                                             devices.updateOne(eq("Device Id", deviceId), newData);
-                                         //}
+                                             devices.updateOne(eq("deviceid", deviceId), newData);
+                                         }
                                          deviceStatus = "Not OK";                                                  
                                          System.out.println(sdf.format(timeStamp.getTime()) + ": Measurement failed. The smartobject is " + smartObjectId + ".  Read value = " + measurement.getV() + " should have been " + temp);
                                      } else {
                                          if (!deviceStatus.equals("OK")) {
-                                             deviceData.append("Status", "OK");
+                                             deviceData.append("status", "OK");
                                              Document newData = new Document("$set", deviceData);
-                                             devices.updateOne(eq("Device Id", deviceId), newData);
+                                             devices.updateOne(eq("deviceid", deviceId), newData);
                                          }
                                          deviceStatus = "OK";
                                          System.out.println(sdf.format(timeStamp.getTime()) + ": Measurement OK");
@@ -236,13 +251,28 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
                                 }
                             }
                         } else {
-                            System.out.println("Could not read SmartObject id, Error code: " + client.getStatusCode());
-                            System.out.println("Response from IoTA is: " + result);
+                            if (!deviceStatus.equals("Not OK")) {
+                                deviceData.append("status", "Not OK");
+                                Document newData = new Document("$set", deviceData);
+                                devices.updateOne(eq("deviceid", deviceId), newData);
+                            }
+                            deviceStatus = "Not OK";
+                            System.out.println(sdf.format(timeStamp.getTime()) + ": Could not read the value from SmartObject, Error code: " + client.getStatusCode() + ". Response from IoTA is: " + result);
                             return;
                         }
                     }
                 } catch (ApiException e) {
-                    System.err.println("Exception when calling SmartObjectApi#smartObjectGetLatestMeasurementForResourcesAsync");
+                    Document deviceData = new Document(new Document("deviceid", deviceId)
+                        .append("time", sdf.format(timeStamp.getTime() ))
+                    );
+
+                    if (!deviceStatus.equals("Not OK")) {
+                        deviceData.append("status", "Not OK");
+                        Document newData = new Document("$set", deviceData);
+                        devices.updateOne(eq("deviceid", deviceId), newData);
+                    }
+                    deviceStatus = "Not OK";
+                    System.out.println(sdf.format(timeStamp.getTime()) + ": Error reading the value from the device: " + endpoint);
                     e.printStackTrace();
                 }
 
@@ -254,7 +284,7 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
             public void run() {
                 System.out.println("Deleting Record and closing connection");
                 try {
-                    DeleteResult deleteResult = devices.deleteOne(eq("Device Id", deviceId));
+                    DeleteResult deleteResult = devices.deleteOne(eq("deviceid", deviceId));
                     System.out.println("Deleted records: " + deleteResult.getDeletedCount());
                     mongo.close();
                 } catch (Exception e) {

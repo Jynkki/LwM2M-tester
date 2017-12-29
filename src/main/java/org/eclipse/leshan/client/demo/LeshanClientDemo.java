@@ -82,11 +82,12 @@ public class LeshanClientDemo {
 
     private static UUID idOne = UUID.randomUUID();
     private static UUID idTwo = UUID.randomUUID();
-    private static String httpsURL = "https://api.blab.iotacc.ericsson.net";
-    private static String URLPath = "occhub/proxy/appiot/api/v3";
+    private static String httpsURL = null;
+    private static String URLPath = null; 
 
     private static MyLocation locationInstance;
     private static RandomTemperatureSensor temperatureInstance;
+    private static SecretsConfig secretsConfiguration;
     private static String token = DEFAULT_TOKEN;
     private static String serverURI = null;
     private static String XDeviceNetwork = null;
@@ -94,6 +95,8 @@ public class LeshanClientDemo {
     private static String pskIdentityString = null;
     private static String endpoint = null;
     private static String mongoURI = null;
+    private static boolean LOCAL = false;
+    private static final String SECRETS_DIR = "/run/secrets/";
 
     public static void main(final String[] args) {
 
@@ -101,6 +104,7 @@ public class LeshanClientDemo {
         Options options = new Options();
 
         options.addOption("h", "help", false, "Display help information.");
+        options.addOption("l", false, "If present use configuration.json in local directory.");
         options.addOption("n", true, String.format(
                 "Set the endpoint name of the Client.\nDefault: the local hostname or '%s' if any.", DEFAULT_ENDPOINT));
         options.addOption("b", false, "If present use bootstrap.");
@@ -131,6 +135,13 @@ public class LeshanClientDemo {
             System.err.println("Parsing failed.  Reason: " + e.getMessage());
             formatter.printHelp(USAGE, options);
             return;
+        }
+
+        // Use local configuration
+        if (cl.hasOption("l")) {
+            LOCAL = true;
+        } else {
+            LOCAL = false;
         }
 
         // Print help
@@ -256,12 +267,22 @@ public class LeshanClientDemo {
     }
 
     public static JSONObject readConfig() {
+        String fileName = null;
+        secretsConfiguration = new SecretsConfig();
+        //for(String key: secretsConfiguration.localSecrets().keySet())
+        //    System.out.println(key + " - " + secretsConfiguration.localSecrets().get(key));
+            //System.out.println("TESTING TESTING " + secretsConfiguration.localSecrets().get("LocationId"));
         String deviceId = null;
         String pskKey = null;
         JSONParser fileparser = new JSONParser();
         JSONObject configObject = new JSONObject();
+        if (LOCAL) {
+            fileName = "configuration.json";
+        } else {
+            fileName = SECRETS_DIR + "configuration.json";
+        } 
         try {
-            Object file = fileparser.parse(new FileReader("configuration.json"));
+            Object file = fileparser.parse(new FileReader(fileName));
             configObject =  (JSONObject) file;
             token = configObject.get("Authorization").toString();
             configObject.remove("Authorization");
@@ -313,7 +334,7 @@ public class LeshanClientDemo {
         HttpClient httpClient = HttpClientBuilder.create().build();
         try {
             String PATH = "devices";
-            HttpPost request = new HttpPost(httpsURL + "/" + URLPath +"/" + PATH);
+            HttpPost request = new HttpPost(httpsURL + "/" + URLPath +"/api/v3/" + PATH);
             StringEntity params =new StringEntity(configObject.toString());
             request.addHeader("content-type", "application/json");
             request.addHeader("X-DeviceNetwork", XDeviceNetwork);
@@ -425,7 +446,7 @@ public class LeshanClientDemo {
                 HttpClient httpClient = HttpClientBuilder.create().build();
                 try {
                     String COMMAND = "devices";
-                    HttpDelete delete = new HttpDelete(httpsURL + "/" + URLPath +"/" + COMMAND + "/" + deviceId);
+                    HttpDelete delete = new HttpDelete(httpsURL + "/" + URLPath +"/api/v3/" + COMMAND + "/" + deviceId);
                     //StringEntity params =new StringEntity(obj.toString());
                     delete.addHeader("X-DeviceNetwork", XDeviceNetwork);
                     delete.addHeader("Authorization", token);
